@@ -143,16 +143,15 @@ runs:
             STRICT_LINE="  - Exigir branch atualizado para merge: $STRICT_STATUS_EMOJI"
           fi
 
-          PROTECTION_SECTION="$(cat <<EOF
-**Proteção do branch base \`$BASE_BRANCH\`:**
-- Histórico linear obrigatório: $LINEAR_HISTORY_EMOJI
-- Status checks obrigatórios: $REQUIRED_STATUS_EMOJI
-$STRICT_LINE
-- Reviews obrigatórios: $REQUIRED_APPROVING aprovação(ões)
-- Regras válidas também para admins: $ENFORCE_ADMINS_EMOJI
-- Restrição de quem pode pushar: $RESTRICTIONS_EMOJI
-EOF
-)"
+          PROTECTION_SECTION="**Proteção do branch base \`$BASE_BRANCH\`:**"
+          PROTECTION_SECTION="$PROTECTION_SECTION"$'\n'"- Histórico linear obrigatório: $LINEAR_HISTORY_EMOJI"
+          PROTECTION_SECTION="$PROTECTION_SECTION"$'\n'"- Status checks obrigatórios: $REQUIRED_STATUS_EMOJI"
+          if [ -n "$STRICT_LINE" ]; then
+            PROTECTION_SECTION="$PROTECTION_SECTION"$'\n'"$STRICT_LINE"
+          fi
+          PROTECTION_SECTION="$PROTECTION_SECTION"$'\n'"- Reviews obrigatórios: $REQUIRED_APPROVING aprovação(ões)"
+          PROTECTION_SECTION="$PROTECTION_SECTION"$'\n'"- Regras válidas também para admins: $ENFORCE_ADMINS_EMOJI"
+          PROTECTION_SECTION="$PROTECTION_SECTION"$'\n'"- Restrição de quem pode pushar: $RESTRICTIONS_EMOJI"
         else
           PROTECTION_SECTION="⚠️ Não foi possível ler a proteção do branch \`$BASE_BRANCH\` (status HTTP $BRANCH_PROT_STATUS)."
         fi
