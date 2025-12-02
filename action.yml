@@ -25,7 +25,23 @@ outputs:
 runs:
   using: "composite"
   steps:
-    - id: fetch-permissions
+    - id: fetch-repo
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.token }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+      run: |
+        set -euo pipefail
+        GITHUB_API_URL="https://api.github.com"
+        RESPONSE="$(curl -sS \
+          -H "Authorization: Bearer $GITHUB_TOKEN" \
+          -H "Accept: application/vnd.github+json" \
+          "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY")"
+        {
+          printf 'repo_json<<EOF\n%s\nEOF\n' "$RESPONSE"
+        } >>"$GITHUB_OUTPUT"
+
+    - id: fetch-protection
       shell: bash
       env:
         GITHUB_TOKEN: ${{ inputs.token }}
@@ -34,36 +50,26 @@ runs:
       run: |
         set -euo pipefail
         GITHUB_API_URL="https://api.github.com"
-
-        REPO_RESPONSE="$(curl -sS \
-          -H "Authorization: Bearer $GITHUB_TOKEN" \
-          -H "Accept: application/vnd.github+json" \
-          "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY")"
-
         TMP_PROTECTION="$(mktemp)"
-
-        BRANCH_PROT_STATUS="$(curl -sS \
+        STATUS="$(curl -sS \
           -o "$TMP_PROTECTION" \
           -w '%{http_code}' \
           -H "Authorization: Bearer $GITHUB_TOKEN" \
           -H "Accept: application/vnd.github+json" \
           "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/branches/$BASE_BRANCH/protection")"
-
-        PROTECTION_RESPONSE="$(cat "$TMP_PROTECTION" || echo '')"
+        BODY="$(cat "$TMP_PROTECTION" || echo '')"
         rm -f "$TMP_PROTECTION" || true
-
         {
-          printf 'repo_json<<EOF\n%s\nEOF\n' "$REPO_RESPONSE"
-          printf 'protection_json<<EOF\n%s\nEOF\n' "$PROTECTION_RESPONSE"
-          echo "branch_prot_status=$BRANCH_PROT_STATUS"
-        } >> "$GITHUB_OUTPUT"
+          printf 'protection_json<<EOF\n%s\nEOF\n' "$BODY"
+          echo "branch_prot_status=$STATUS"
+        } >>"$GITHUB_OUTPUT"
 
     - id: build-checklist
       shell: bash
       env:
-        REPO_JSON: ${{ steps.fetch-permissions.outputs.repo_json }}
-        PROTECTION_JSON: ${{ steps.fetch-permissions.outputs.protection_json }}
-        BRANCH_PROT_STATUS: ${{ steps.fetch-permissions.outputs.branch_prot_status }}
+        REPO_JSON: ${{ steps.fetch-repo.outputs.repo_json }}
+        PROTECTION_JSON: ${{ steps.fetch-protection.outputs.protection_json }}
+        BRANCH_PROT_STATUS: ${{ steps.fetch-protection.outputs.branch_prot_status }}
         BASE_BRANCH: ${{ inputs.base_branch }}
         GITHUB_ACTION_PATH: ${{ github.action_path }}
       run: |
@@ -91,6 +97,7 @@ runs:
         ALLOW_AUTO_MERGE_EMOJI="$(emoji "$ALLOW_AUTO_MERGE")"
         DELETE_BRANCH_ON_MERGE_EMOJI="$(emoji "$DELETE_BRANCH_ON_MERGE")"
 
+        PROTECTION_SECTION=""
         if [ "$BRANCH_PROT_STATUS" = "200" ]; then
           LINEAR_HISTORY="$(printf '%s' "$PROTECTION_JSON" | jq -r '.required_linear_history.enabled // .required_linear_history // empty')"
           REQUIRED_STATUS_CHECKS_PRESENT="$(printf '%s' "$PROTECTION_JSON" | jq -r 'if .required_status_checks and ((.required_status_checks.checks // []) + (.required_status_checks.contexts // []) | length) > 0 then "true" else "false" end')"
@@ -109,17 +116,21 @@ runs:
             REQUIRED_APPROVING="0"
           fi
 
-          PROTECTION_SECTION="**Proteção do branch base \`$BASE_BRANCH\`:**
-- Histórico linear obrigatório: $LINEAR_HISTORY_EMOJI
-- Status checks obrigatórios: $REQUIRED_STATUS_EMOJI"
+          STRICT_LINE=""
           if [ "$REQUIRED_STATUS_CHECKS_PRESENT" = "true" ] || [ "$STRICT_STATUS" = "true" ] || [ "$STRICT_STATUS" = "false" ]; then
-            PROTECTION_SECTION="$PROTECTION_SECTION
-  - Exigir branch atualizado para merge: $STRICT_STATUS_EMOJI"
+            STRICT_LINE="  - Exigir branch atualizado para merge: $STRICT_STATUS_EMOJI"
           fi
-          PROTECTION_SECTION="$PROTECTION_SECTION
+
+          PROTECTION_SECTION="$(cat <<EOF
+**Proteção do branch base \`$BASE_BRANCH\`:**
+- Histórico linear obrigatório: $LINEAR_HISTORY_EMOJI
+- Status checks obrigatórios: $REQUIRED_STATUS_EMOJI
+$STRICT_LINE
 - Reviews obrigatórios: $REQUIRED_APPROVING aprovação(ões)
 - Regras válidas também para admins: $ENFORCE_ADMINS_EMOJI
-- Restrição de quem pode pushar: $RESTRICTIONS_EMOJI"
+- Restrição de quem pode pushar: $RESTRICTIONS_EMOJI
+EOF
+)"
         else
           PROTECTION_SECTION="⚠️ Não foi possível ler a proteção do branch \`$BASE_BRANCH\` (status HTTP $BRANCH_PROT_STATUS)."
         fi
@@ -136,7 +147,7 @@ runs:
 
         {
           printf 'message_checklist<<EOF\n%s\nEOF\n' "$CHECKLIST_MSG"
-        } >> "$GITHUB_OUTPUT"
+        } >>"$GITHUB_OUTPUT"
 
     - id: comment-checklist
       uses: Malnati/pr-comment@v4
@@ -145,7 +156,7 @@ runs:
         pr_number: ${{ inputs.pr_number }}
         header_actor: ${{ github.actor }}
         header_title: "📋 Checklist de proteção de branch"
-        header_subject: Regras aplicadas ao branch base ${{ inputs.base_branch }}
+        header_subject: "Regras aplicadas ao branch base ${{ inputs.base_branch }}"
         body_message: ${{ steps.build-checklist.outputs.message_checklist }}
         body_scope: ""
         body_todo: ""
