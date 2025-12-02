@@ -1,6 +1,7 @@
 <!-- .github/workflows/action.yml -->
+
 name: "check-permissions"
-description: "Coleta configurações de merge e proteção de branch e gera uma checklist formatada."
+description: "Coleta configurações de merge e proteção de branch, gera checklist e comenta na PR."
 
 inputs:
   token:
@@ -8,6 +9,9 @@ inputs:
     required: true
   base_branch:
     description: "Nome do branch base a ser verificado (ex.: main, staging)"
+    required: true
+  pr_number:
+    description: "Número da Pull Request a ser comentada"
     required: true
 
 outputs:
@@ -166,3 +170,17 @@ runs:
         else:
             print(msg)
         PY
+
+    - id: comment-checklist
+      uses: Malnati/pr-comment@v1
+      with:
+        token: ${{ inputs.token }}
+        pr_number: ${{ inputs.pr_number }}
+        header_actor: ${{ github.actor }}
+        header_title: "📋 Checklist de proteção de branch"
+        header_subject: Regras aplicadas ao branch base ${{ inputs.base_branch }}
+        body_message: ${{ steps.build-checklist.outputs.message_checklist }}
+        body_scope: ""
+        body_todo: ""
+        footer_result: "Checklist gerada automaticamente."
+        footer_advise: "Revise as regras antes de ajustar a estratégia de merge."
