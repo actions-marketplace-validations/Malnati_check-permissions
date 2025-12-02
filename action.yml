@@ -1,7 +1,7 @@
+# action.yml
 name: "Check Branch Permissions"
 description: "Collect branch protection and merge settings and post a Markdown checklist on the Pull Request."
 author: "Ricardo Malnati"
-
 branding:
   icon: "shield"
   color: "blue"
@@ -33,7 +33,6 @@ runs:
         BASE_BRANCH: ${{ inputs.base_branch }}
       run: |
         set -euo pipefail
-
         GITHUB_API_URL="https://api.github.com"
 
         REPO_RESPONSE="$(curl -sS \
