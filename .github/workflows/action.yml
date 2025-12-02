@@ -22,7 +22,7 @@ outputs:
 runs:
   using: "composite"
   steps:
-    - id: build-checklist
+    - id: fetch-permissions
       shell: bash
       env:
         GITHUB_TOKEN: ${{ inputs.token }}
@@ -50,11 +50,22 @@ runs:
         PROTECTION_RESPONSE="$(cat "$TMP_PROTECTION" || echo '')"
         rm -f "$TMP_PROTECTION" || true
 
-        export REPO_JSON="$REPO_RESPONSE"
-        export PROTECTION_JSON="$PROTECTION_RESPONSE"
-        export BRANCH_PROT_STATUS
-        export BASE_BRANCH
-        export GITHUB_OUTPUT
+        {
+          printf 'repo_json<<EOF\n%s\nEOF\n' "$REPO_RESPONSE"
+          printf 'protection_json<<EOF\n%s\nEOF\n' "$PROTECTION_RESPONSE"
+          echo "branch_prot_status=$BRANCH_PROT_STATUS"
+        } >> "$GITHUB_OUTPUT"
+
+    - id: build-checklist
+      shell: bash
+      env:
+        REPO_JSON: ${{ steps.fetch-permissions.outputs.repo_json }}
+        PROTECTION_JSON: ${{ steps.fetch-permissions.outputs.protection_json }}
+        BRANCH_PROT_STATUS: ${{ steps.fetch-permissions.outputs.branch_prot_status }}
+        BASE_BRANCH: ${{ inputs.base_branch }}
+        GITHUB_OUTPUT: ${{ env.GITHUB_OUTPUT }}
+      run: |
+        set -euo pipefail
 
         python - << 'PY'
         import json
